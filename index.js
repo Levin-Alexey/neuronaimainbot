@@ -1,7 +1,36 @@
 /**
- * Neuron AI - Telegram Bot on Cloudflare Workers
+ * Neuron AI - Main Router
  */
 import { saveUserToDb } from './services/supabase.js';
+import { sendMessage, sendVideoNote, answerCallbackQuery } from './services/telegram.js';
+import { STATES } from './utils/states.js';
+
+// Импортируем обработчики
+import { handleSalesFlow } from './handlers/sales.js';
+import { handleManagerFlow } from './handlers/manager.js';
+import { handleAboutFlow } from './handlers/about.js';
+import { handleServicesFlow } from './handlers/services.js';
+import { handlePortfolioFlow } from './handlers/portfolio.js';
+import { handleChatbotsOffer } from './handlers/offers/chatbots.js';
+import { handleVoiceBotsOffer } from './handlers/offers/voice_bots.js';
+import { handleAvatarsOffer } from './handlers/offers/avatars.js';
+import { handleContentGenerationOffer } from './handlers/offers/content_generation.js';
+import { handleAutomationOffer } from './handlers/offers/automation.js';
+import { handleIntegrationOffer } from './handlers/offers/integration.js';
+import { handleCustomDevelopmentOffer } from './handlers/offers/custom_development.js';
+import { handleConsultationOffer } from './handlers/offers/consultation.js';
+import { handleTutorBotExample } from './handlers/examples/tutor_bot.js';
+import { handleVAPIBotExample } from './handlers/examples/vapi_bot.js';
+import { handleVertexAIBotExample } from './handlers/examples/vertex_ai_bot.js';
+import { handleDifyBotExample } from './handlers/examples/dify_bot.js';
+import { handlePhotoAnimationExample } from './handlers/examples/photo_animation.js';
+import { handleCorporateAssistantExample } from './handlers/examples/corporate_assistant.js';
+import { handleVideoGenerationExample } from './handlers/examples/video_generation.js';
+import { handleImageGenerationExample } from './handlers/examples/image_generation.js';
+import { handleHeyGenAvatarExample } from './handlers/examples/heygen_avatar.js';
+import { handleUnityAvatarExample } from './handlers/examples/unity_avatar.js';
+import { handleAstrologyChatbotExample } from './handlers/examples/astrology_chatbot.js';
+import { handleN8NAutomationExample } from './handlers/examples/n8n_automation.js';
 
 // 1. ВОТ ТВОЙ ID ВИДЕО-КРУЖОЧКА
 const WELCOME_VIDEO_ID = 'DQACAgIAAxkBAANHaW1Ag8kYEGZkSaBL_DApnvE8IAkAAvCTAAKzyWlL_bC7hUt2Fc04BA';
@@ -107,161 +136,188 @@ async function saveInteraction(chatId, action, env) {
 // --- ОБРАБОТЧИК ---
 
 async function handleUpdate(update, env) {
-  // 1. Обработка текстовых сообщений
-  if (update.message) {
-    const chatId = update.message.chat.id;
-    const text = update.message.text;
-    const user = update.message.from;
+  const message = update.message;
+  const callback = update.callback_query;
+
+  // 1. Если это КНОПКА (Callback)
+  if (callback) {
+    const chatId = callback.message.chat.id;
+    const data = callback.data;
+    const user = callback.from;
 
     try {
-        await saveUserToDb(user, env); 
+      await saveUserToDb(user, env);
     } catch (e) {
-        console.error("DB Save Error", e);
+      console.error("DB Save Error", e);
     }
 
     try {
-        await saveUserData(chatId, {
-            username: update.message.from.username,
-            firstName: update.message.from.first_name
-        }, env);
-    } catch (e) { console.error('Ошибка сохранения UserData:', e); }
+      await saveInteraction(chatId, data, env);
+      const currentData = await getUserData(chatId, env);
+      await saveUserData(chatId, {
+        lastAction: data,
+        interactions: (currentData.interactions || 0) + 1
+      }, env);
+    } catch (e) {
+      console.error('Ошибка сохранения KV:', e);
+    }
 
+    // Отвечаем на колбек
+    await answerCallbackQuery(callback.id, env);
+
+    // Обработка кнопок меню
+    switch (data) {
+      case 'about':
+        return handleAboutFlow(chatId, 'about', env, user);
+      case 'contact_manager':
+        return handleAboutFlow(chatId, 'contact_manager', env, user);
+      case 'services':
+        return handleServicesFlow(chatId, env);
+      case 'portfolio':
+        return handlePortfolioFlow(chatId, env);
+      case 'ai_consultant':
+        // Запускаем AI калькулятор стоимости
+        await env.NEURON_KV?.put(`user_state:${chatId}`, JSON.stringify({ step: STATES.IDLE, salesData: {} }));
+        return handleSalesFlow(chatId, '', { step: STATES.IDLE }, env);
+      case 'manager':
+        // Запускаем связь с менеджером
+        await env.NEURON_KV?.put(`user_state:${chatId}`, JSON.stringify({ step: STATES.IDLE, data: {} }));
+        return handleManagerFlow(chatId, { message: { text: '', from: user } }, { step: STATES.IDLE }, env);
+      case 'contacts':
+        return handleContacts(chatId, env);
+      case 'offer_chatbots':
+        return handleChatbotsOffer(chatId, env);
+      case 'offer_voice_bots':
+        return handleVoiceBotsOffer(chatId, env);
+      case 'offer_avatars':
+        return handleAvatarsOffer(chatId, env);
+      case 'offer_content_generation':
+        return handleContentGenerationOffer(chatId, env);
+      case 'offer_automation':
+        return handleAutomationOffer(chatId, env);
+      case 'offer_integration':
+        return handleIntegrationOffer(chatId, env);
+      case 'offer_custom_development':
+        return handleCustomDevelopmentOffer(chatId, env);
+      case 'offer_consultation':
+        return handleConsultationOffer(chatId, env);
+      case 'example_tutor_bot':
+        return handleTutorBotExample(chatId, env);
+      case 'example_vapi_bot':
+        return handleVAPIBotExample(chatId, env);
+      case 'example_vertex_ai_bot':
+        return handleVertexAIBotExample(chatId, env);
+      case 'example_dify_bot':
+        return handleDifyBotExample(chatId, env);
+      case 'example_photo_animation':
+        return handlePhotoAnimationExample(chatId, env);
+      case 'example_corporate_assistant':
+        return handleCorporateAssistantExample(chatId, env);
+      case 'example_video_generation':
+        return handleVideoGenerationExample(chatId, env);
+      case 'example_image_generation':
+        return handleImageGenerationExample(chatId, env);
+      case 'example_heygen_avatar':
+        return handleHeyGenAvatarExample(chatId, env);
+      case 'example_unity_avatar':
+        return handleUnityAvatarExample(chatId, env);
+      case 'example_astrology_chatbot':
+        return handleAstrologyChatbotExample(chatId, env);
+      case 'example_n8n_automation':
+        return handleN8NAutomationExample(chatId, env);
+      case 'back':
+        // Очищаем состояние при возврате в меню
+        await env.NEURON_KV?.delete(`user_state:${chatId}`);
+        return sendMessage(chatId, WELCOME_MESSAGE, env, MAIN_KEYBOARD);
+      default:
+        return sendMessage(chatId, 'Неизвестная команда', env);
+    }
+  }
+
+  // 2. Если это СООБЩЕНИЕ (Текст, Фото, Контакт)
+  if (message) {
+    const chatId = message.chat.id;
+    const text = message.text;
+    const user = message.from;
+
+    try {
+      await saveUserToDb(user, env);
+    } catch (e) {
+      console.error("DB Save Error", e);
+    }
+
+    try {
+      await saveUserData(chatId, {
+        username: user.username,
+        firstName: user.first_name
+      }, env);
+    } catch (e) {
+      console.error('Ошибка сохранения UserData:', e);
+    }
+
+    // Получаем текущее состояние пользователя из KV
+    let userState = { step: STATES.IDLE, salesData: {} };
+    if (env.NEURON_KV) {
+      userState = await env.NEURON_KV.get(`user_state:${chatId}`, 'json') || userState;
+    }
+
+    // A. Команда /start - всегда сбрасывает всё
     if (text === '/start') {
-      try { await saveInteraction(chatId, 'start', env); } catch(e) {}
-      
-      // --- НОВОЕ: ОТПРАВЛЯЕМ ВИДЕО ПЕРЕД ТЕКСТОМ ---
       try {
-          const videoResult = await sendVideoNote(chatId, WELCOME_VIDEO_ID, env);
-          console.log('✅ Видео отправлено:', videoResult);
-          
-          // Задержка для гарантии порядка
-          await new Promise(resolve => setTimeout(resolve, 800));
+        await saveInteraction(chatId, 'start', env);
+      } catch (e) {}
+      
+      await env.NEURON_KV?.delete(`user_state:${chatId}`); // Очистка памяти
+      
+      // Отправляем видео перед текстом
+      try {
+        const videoResult = await sendVideoNote(chatId, WELCOME_VIDEO_ID, env);
+        console.log('✅ Видео отправлено:', videoResult);
+        await new Promise(resolve => setTimeout(resolve, 800));
       } catch (e) {
-          console.error("❌ Ошибка отправки видео:", JSON.stringify(e, null, 2));
-          console.error("Stack:", e.stack);
+        console.error("❌ Ошибка отправки видео:", JSON.stringify(e, null, 2));
       }
       
       return sendMessage(chatId, WELCOME_MESSAGE, env, MAIN_KEYBOARD);
     }
-  }
 
-  // 2. Обработка кнопок
-  if (update.callback_query) {
-    const callbackId = update.callback_query.id;
-    const chatId = update.callback_query.message.chat.id; 
-    const data = update.callback_query.data;
-    const user = update.callback_query.from;
-
-    try {
-        await saveUserToDb(user, env);
-    } catch (e) {}
-
-    try {
-        await saveInteraction(chatId, data, env);
-        const currentData = await getUserData(chatId, env);
-        await saveUserData(chatId, {
-            lastAction: data,
-            interactions: (currentData.interactions || 0) + 1
-        }, env);
-    } catch (e) { console.error('Ошибка сохранения KV:', e); }
-
-    await answerCallbackQuery(callbackId, env);
-
-    switch (data) {
-      case 'about': return handleAbout(chatId, env);
-      case 'services': return handleServices(chatId, env);
-      case 'portfolio': return handlePortfolio(chatId, env);
-      case 'ai_consultant': return handleAIConsultant(chatId, env);
-      case 'manager': return handleManager(chatId, env);
-      case 'contacts': return handleContacts(chatId, env);
-      case 'back': return sendMessage(chatId, WELCOME_MESSAGE, env, MAIN_KEYBOARD);
-      default: return sendMessage(chatId, 'Неизвестная команда', env);
+    // A2. Команда /manager - запускает обработчик менеджера
+    if (text === '/manager') {
+      try {
+        await saveInteraction(chatId, 'manager', env);
+      } catch (e) {}
+      
+      await env.NEURON_KV?.put(`user_state:${chatId}`, JSON.stringify({ step: STATES.IDLE, data: {} }));
+      return handleManagerFlow(chatId, { message: { text: '', from: user } }, { step: STATES.IDLE }, env);
     }
+
+    // B. Если нажали "Вернуться в меню" или "Отмена"
+    if (text === "❌ Вернуться в меню" || text === "❌ Отмена") {
+      await env.NEURON_KV?.delete(`user_state:${chatId}`);
+      return sendMessage(chatId, WELCOME_MESSAGE, env, MAIN_KEYBOARD);
+    }
+
+    // C. Если мы ВНУТРИ ВОРОНКИ ПРОДАЖ (Шаг начинается с 'sales_')
+    if (userState.step && userState.step.toString().includes('sales_')) {
+      // Если пришел контакт через кнопку
+      const content = message.contact
+        ? `${message.contact.phone_number} (${message.contact.first_name})`
+        : text;
+
+      return handleSalesFlow(chatId, content, userState, env, user);
+    }
+
+    // D. Если мы В РЕЖИМЕ МЕНЕДЖЕРА
+    if (userState.step === STATES.MANAGER_WAIT) {
+      return handleManagerFlow(chatId, update, userState, env);
+    }
+
+    // E. Если ничего не подошло
+    return sendMessage(chatId, "Используйте меню 👇", env, MAIN_KEYBOARD);
   }
-}
-
-// --- API TELEGRAM ---
-
-async function sendMessage(chatId, text, env, keyboard = null) {
-  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN; 
-  if (!token) throw new Error("Токен бота не найден в переменных!");
-
-  const payload = {
-    chat_id: chatId,
-    text: text,
-    parse_mode: 'HTML'
-  };
-
-  if (keyboard) {
-    payload.reply_markup = keyboard;
-  }
-
-  const url = `https://api.telegram.org/bot${token}/sendMessage`;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-
-  return response.json();
-}
-
-// 2. НОВАЯ ФУНКЦИЯ ДЛЯ ВИДЕО-КРУЖОЧКОВ
-async function sendVideoNote(chatId, videoFileId, env) {
-  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN;
-  
-  const url = `https://api.telegram.org/bot${token}/sendVideoNote`;
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      video_note: videoFileId
-    })
-  });
-  
-  const result = await response.json();
-  
-  if (!result.ok) {
-    console.error('Telegram API Error:', result);
-    throw new Error(`Telegram API: ${result.description || 'Unknown error'}`);
-  }
-  
-  return result;
-}
-
-async function answerCallbackQuery(callbackId, env) {
-  const token = env.TELEGRAM_BOT_TOKEN || env.TELEGRAM_TOKEN;
-  return fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ callback_query_id: callbackId })
-  });
 }
 
 // --- HANDLERS ---
-
-async function handleAbout(chatId, env) {
-  return sendMessage(chatId, 'ℹ️ <b>О компании Neuron AI</b>\n\nМы — команда энтузиастов и инженеров...', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
-}
-
-async function handleServices(chatId, env) {
-  return sendMessage(chatId, '🛠️ <b>Наши услуги:</b>\n\n1. Внедрение LLM\n2. Чат-боты\n3. Аналитика данных', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
-}
-
-async function handlePortfolio(chatId, env) {
-  return sendMessage(chatId, '🎨 <b>Наше портфолио:</b>\n\nКейс 1: Бот для риелторов\nКейс 2: Анализ звонков', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
-}
-
-async function handleAIConsultant(chatId, env) {
-  return sendMessage(chatId, '🤖 <b>AI Консультант</b>\n\nНапишите свой вопрос, и нейросеть ответит вам (функция в разработке).', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
-}
-
-async function handleManager(chatId, env) {
-  return sendMessage(chatId, '👨‍💼 <b>Связь с менеджером</b>\n\nЗаявка отправлена. Ожидайте ответа.', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
-}
 
 async function handleContacts(chatId, env) {
   return sendMessage(chatId, '📞 <b>Контакты:</b>\n\nТелефон: +7 (999) 000-00-00\nEmail: info@neuronai.com', env, { inline_keyboard: [[{ text: '⬅️ Назад', callback_data: 'back' }]] });
