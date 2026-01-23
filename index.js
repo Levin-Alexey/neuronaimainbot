@@ -31,6 +31,10 @@ import { handleHeyGenAvatarExample } from './handlers/examples/heygen_avatar.js'
 import { handleUnityAvatarExample } from './handlers/examples/unity_avatar.js';
 import { handleAstrologyChatbotExample } from './handlers/examples/astrology_chatbot.js';
 import { handleN8NAutomationExample } from './handlers/examples/n8n_automation.js';
+import { handleBenefitsFlow } from './handlers/benefits.js';
+import { handleSavingsCalculator } from './handlers/calc/savings_calculator.js';
+import { handleROICalculator } from './handlers/calc/roi_calculator.js';
+import { handleMaterialsFlow } from './handlers/materials.js';
 
 // 1. ВОТ ТВОЙ ID ВИДЕО-КРУЖОЧКА
 const WELCOME_VIDEO_ID = 'DQACAgIAAxkBAANHaW1Ag8kYEGZkSaBL_DApnvE8IAkAAvCTAAKzyWlL_bC7hUt2Fc04BA';
@@ -81,7 +85,13 @@ const MAIN_KEYBOARD = {
       { text: '🤖 AI Консультант', callback_data: 'ai_consultant' }
     ],
     [
+      { text: '💰 Посчитать выгоду от AI', callback_data: 'benefits' }
+    ],
+    [
       { text: '👨‍💼 Связаться с менеджером', callback_data: 'manager' }
+    ],
+    [
+      { text: '🎓 Полезные материалы', callback_data: 'materials' }
     ],
     [
       { text: '📞 Контакты', callback_data: 'contacts' }
@@ -185,6 +195,14 @@ async function handleUpdate(update, env) {
         return handleManagerFlow(chatId, { message: { text: '', from: user } }, { step: STATES.IDLE }, env);
       case 'contacts':
         return handleContacts(chatId, env);
+      case 'materials':
+        return handleMaterialsFlow(chatId, env);
+      case 'benefits':
+        return handleBenefitsFlow(chatId, env);
+      case 'calc_savings':
+        return handleSavingsCalculator(chatId, env);
+      case 'calc_roi':
+        return handleROICalculator(chatId, env);
       case 'offer_chatbots':
         return handleChatbotsOffer(chatId, env);
       case 'offer_voice_bots':
